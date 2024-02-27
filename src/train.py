@@ -13,7 +13,7 @@ from gymnasium.wrappers import TimeLimit
 from env_hiv import HIVPatient
 
 env = TimeLimit(
-    env=HIVPatient(domain_randomization=False), max_episode_steps=200
+    env=HIVPatient(domain_randomization=True), max_episode_steps=200
 )  # The time wrapper limits the number of steps in an episode at 200.
 # Now is the floor is yours to implement the agent and train it.
 
@@ -45,29 +45,6 @@ class ReplayBuffer:
     def sample(self, batch_size):
         batch = random.sample(self.data, batch_size)
         return list(map(lambda x:torch.Tensor(np.array(x)).to(self.device), list(zip(*batch))))
-    
-    def save(self, path):
-        checkpoint = {
-            'capacity': self.capacity,
-            'data': self.data,
-            'index': self.index,
-            device: self.device
-        }
-        torch.save(checkpoint, path)
-        print(f"Replay buffer saved.")
-
-    def load(self, path):
-        if os.path.isfile(path):
-            checkpoint = torch.load(path)
-            self.capacity = checkpoint['capacity']
-            self.data = checkpoint['data']
-            self.index = checkpoint['index']
-            self.device = checkpoint['device']
-            print(f"Replay buffer loaded.")
-            return True
-        else:
-            print(f"No replay buffer found at {path}.")
-            return False
     
     def __len__(self):
         return len(self.data)
@@ -240,7 +217,8 @@ class ProjectAgent:
     def act(self, observation, use_random=False):
         # We use float32 for compatibility with MPS devices.
         with torch.no_grad():
-            return self.model.sample_action(torch.as_tensor(observation, dtype=torch.float32, device=self.device))
+            Q = self.model(torch.Tensor(observation).unsqueeze(0).to(self.device))
+            return torch.argmax(Q).item()
 
     # def save(self, path):
     #     torch.save(self.model.state_dict(), path)
@@ -303,15 +281,16 @@ class ProjectAgent:
                     loss.backward()
                     self.optimizer.step()
 
-            if self.step % self.update_target_freq == 0: 
-                if self.update_strategy == 'replace':
+            
+            if self.update_strategy == 'replace':
+                if self.step % self.update_target_freq == 0: 
                     self.target_model.load_state_dict(self.model.state_dict())
-                elif self.update_strategy == 'ema':
-                    target_state_dict = self.target_model.state_dict()
-                    model_state_dict = self.model.state_dict()
-                    for k in target_state_dict.keys():
-                        target_state_dict[k] = self.update_target_tau * model_state_dict[k] + (1 - self.update_target_tau) * target_state_dict[k]
-                    self.target_model.load_state_dict(target_state_dict)
+            elif self.update_strategy == 'ema':
+                target_state_dict = self.target_model.state_dict()
+                model_state_dict = self.model.state_dict()
+                for k in target_state_dict.keys():
+                    target_state_dict[k] = self.update_target_tau * model_state_dict[k] + (1 - self.update_target_tau) * target_state_dict[k]
+                self.target_model.load_state_dict(target_state_dict)
 
             # Update state
             self.step += 1
@@ -372,7 +351,9 @@ def seed_everything(seed: int = 42):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    force_train = parser.add_argument("--force-training,f", type=bool, default=False)
+    parser.add_argument("-f", type=bool, default=False)
+    args = parser.parse_args()
+    force_train = args.f
 
     seed_everything(seed=42)
 
