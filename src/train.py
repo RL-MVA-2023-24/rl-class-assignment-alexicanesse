@@ -4,7 +4,7 @@ import os
 import random
 import numpy as np
 import argparse
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from evaluate import evaluate_HIV, evaluate_HIV_population
 from torch.distributions import Categorical
@@ -227,12 +227,12 @@ class ProjectAgent:
             self.memory.capacity = parameters['capacity']
             self.memory.data = parameters['data']
             self.memory.index = parameters['index']
-            self.tensorboard = SummaryWriter(log_dir=parameters['tensorboard_logdir'])
+            # self.tensorboard = SummaryWriter(log_dir=parameters['tensorboard_logdir'])
             print(f"Agent loaded from episode {self.episode}.")
             return True
         else:
             print(f"No model found at {path}.")
-            self.tensorboard = SummaryWriter()
+            # self.tensorboard = SummaryWriter()
             return False
 
     def act(self, observation, use_random=False):
@@ -325,11 +325,11 @@ class ProjectAgent:
                 V0 = self.V_initial_state(env, self.monitoring_nb_trials)
                 V_init_state.append(V0)
 
-                self.tensorboard.add_scalar("Reward/episode", episode_cum_reward, self.episode)
-                self.tensorboard.add_scalar("Epsilon/episode", self.epsilon, self.episode)
-                self.tensorboard.add_scalar("Loss/episode", loss, self.episode)
-                self.tensorboard.add_scalar("V0/episode", V0, self.episode)
-                self.tensorboard.flush()
+                # self.tensorboard.add_scalar("Reward/episode", episode_cum_reward, self.episode)
+                # self.tensorboard.add_scalar("Epsilon/episode", self.epsilon, self.episode)
+                # self.tensorboard.add_scalar("Loss/episode", loss, self.episode)
+                # self.tensorboard.add_scalar("V0/episode", V0, self.episode)
+                # self.tensorboard.flush()
 
                 if self.episode % self.save_frequency == 0:
                     self.save(self.default_save_path)
@@ -341,7 +341,7 @@ class ProjectAgent:
             else:
                 state = next_state
 
-        self.tensorboard.close()     
+        # self.tensorboard.close()     
         self.save(self.default_save_path)
         print("Training finished.")
 
