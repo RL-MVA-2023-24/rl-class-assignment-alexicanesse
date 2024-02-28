@@ -4,7 +4,6 @@ import os
 import random
 import numpy as np
 import argparse
-import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from evaluate import evaluate_HIV, evaluate_HIV_population
@@ -50,7 +49,7 @@ class ReplayBuffer:
         return len(self.data)
     
 class Policy(nn.Module):
-    def __init__(self, state_dim, hidden_dim, action_dim, gamma=0.99):
+    def __init__(self, state_dim, hidden_dim, action_dim, env, gamma=0.99):
         super(Policy, self).__init__()
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -58,12 +57,19 @@ class Policy(nn.Module):
         self.gamma = gamma
 
 
-        self.fc1 = nn.Linear(state_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc4 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc1_val = nn.Linear(state_dim, hidden_dim)
+        self.fc2_val = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3_val = nn.Linear(hidden_dim, hidden_dim)
+        self.fc4_val = nn.Linear(hidden_dim, hidden_dim)
         # self.fc5 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc6 = nn.Linear(hidden_dim, action_dim)
+        self.fc6_val = nn.Linear(hidden_dim, action_dim)
+
+        self.fc1_adv = nn.Linear(state_dim, hidden_dim)
+        self.fc2_adv = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3_adv = nn.Linear(hidden_dim, hidden_dim)
+        self.fc4_adv = nn.Linear(hidden_dim, hidden_dim)
+        # self.fc5 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc6_adv = nn.Linear(hidden_dim, action_dim)
 
         self.LeakyReLU = nn.LeakyReLU()
         self.softmax = nn.Softmax(dim=-1)
@@ -71,15 +77,30 @@ class Policy(nn.Module):
         self.silu = nn.SiLU()
 
     def forward(self, x):
-        x = self.silu(self.fc1(x))
-        x = self.silu(self.fc2(x))
-        x = self.silu(self.fc3(x))
-        x = self.silu(self.fc4(x))
-        # x = torch.leaky_relu(self.fc5(x))
-        x = self.fc6(x)
+        val = self.silu(self.fc1_val(x))
+        val = self.silu(self.fc2_val(val))
+        val = self.silu(self.fc3_val(val))
+        val = self.silu(self.fc4_val(val))
+        # val = torch.leaky_relu(self.fc5(val))
+        val = self.fc6_val(val)
+
+        adv = self.silu(self.fc1_adv(x))
+        adv = self.silu(self.fc2_adv(adv))
+        adv = self.silu(self.fc3_adv(adv))
+        adv = self.silu(self.fc4_adv(adv))
+        # adv = torch.leaky_relu(self.fc5(adv))
+        adv = self.fc6_adv(adv)
+
+
+        # x = self.silu(self.fc1(x))
+        # x = self.silu(self.fc2(x))
+        # x = self.silu(self.fc3(x))
+        # x = self.silu(self.fc4(x))
+        # # x = torch.leaky_relu(self.fc5(x))
+        # x = self.fc6(x)
         # x = self.tanh(x)
         # x = self.softmax(x)
-        return x
+        return val + adv - adv.mean()
 
     def sample_action(self, x):
         # probabilities = self.forward(x)
@@ -100,7 +121,7 @@ class ProjectAgent:
         self.gradient_steps = 2
         self.gamma = 0.98
         self.buffer_size = 1e6
-        self.initial_buffer_size = 8192
+        self.initial_buffer_size = 1024
         self.epsilon_min = 1e-2
         self.epsilon_max = 1.0
         self.epsilon = self.epsilon_max
@@ -125,8 +146,8 @@ class ProjectAgent:
 
         self.save_frequency = 50
 
-        self.model = Policy(self.action_dim, self.hidden_dim, self.output_dim).to(self.device)
-        self.target_model = Policy(self.action_dim, self.hidden_dim, self.output_dim).to(self.device)
+        self.model = Policy(self.action_dim, self.hidden_dim, self.output_dim, env).to(self.device)
+        self.target_model = Policy(self.action_dim, self.hidden_dim, self.output_dim, env).to(self.device)
         self.target_model.load_state_dict(self.model.state_dict())
 
         self.criterion = torch.nn.SmoothL1Loss()
@@ -269,10 +290,14 @@ class ProjectAgent:
             episode_cum_reward += reward
 
             # Gradient step
-            if len(self.memory) > self.batch_size:
+            if len(self.memory) >= self.batch_size:
                 for _ in range(self.gradient_steps):
                     states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
-                    QYmax = self.target_model(next_states).max(1)[0].detach()
+
+                    evaluated_action = torch.argmax(self.model(next_states).detach(), dim=1)
+                    QY = self.target_model(next_states).detach() 
+                    QYmax = QY.gather(1, evaluated_action.unsqueeze(1)).squeeze(1)
+
                     update = torch.addcmul(rewards, 1 - dones, QYmax, value=self.gamma)
                     QXA = self.model(states).gather(1, actions.unsqueeze(1).long())
 
