@@ -5,7 +5,7 @@ import random
 import numpy as np
 import argparse
 # from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
+# from tqdm import tqdm
 from evaluate import evaluate_HIV, evaluate_HIV_population
 from torch.distributions import Categorical
 from gymnasium.wrappers import TimeLimit
@@ -350,7 +350,8 @@ class ProjectAgent:
     def fill_memory(self, env):
         print(f"Filling memory with {self.initial_buffer_size} samples...")
         state,_ = env.reset()
-        for _ in tqdm(range(int(self.initial_buffer_size))):
+        for _ in range(int(self.initial_buffer_size)):
+        # for _ in tqdm(range(int(self.initial_buffer_size))):
             action = env.action_space.sample()
             next_state, reward, done, truncated, _ = env.step(action)
             self.memory.append(state, action, reward, next_state, done)
