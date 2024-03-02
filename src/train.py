@@ -188,7 +188,7 @@ class ProjectAgent:
                 'capacity': self.memory.capacity,
                 'data': self.memory.data,
                 'index': self.memory.index,
-                'tensorboard_logdir': self.tensorboard.get_logdir(),
+                # 'tensorboard_logdir': self.tensorboard.get_logdir(),
             },
         }
         torch.save(checkpoint, path)
